@@ -16,8 +16,9 @@ along with the DAO.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 
-/* 
-Generic contract for a decentralized autonomous organisation to manage a trust
+/*
+Generic contract for a Decentralized Autonomous Organisation (DAO) to manage
+a trust
 */
 
 import "./TokenSale.sol";
@@ -25,164 +26,266 @@ import "./ManagedAccount.sol";
 
 contract DAOInterface {
 
-    // proposals to spend ether of the DAO or choose a new service provider
+    // Proposals to spend the DAO's ether or to choose a new service provider
     Proposal[] public proposals;
-    // the minimal quorum needed for a proposal to vote is calculated by totalSupply / minQuorumDivisor
+    // The quorum needed for each proposal is partially calculated by
+    // totalSupply / minQuorumDivisor
     uint minQuorumDivisor;
-    // the time of the last proposal which has met the minimal quorum
+    // The unix time of the last time quorum was reached on a proposal
     uint lastTimeMinQuorumMet;
-
-    // to total amount of wei received as reward which has not been sent to the rewardAccount
+    // The total amount of wei received as reward that has not been sent to
+    // the rewardAccount
     uint public rewards;
-
-    // address of the service provider
+    // Address of the service provider
     address public serviceProvider;
-    // list of addresses the DAO is allowed to send money to
+    // The whitelist: List of addresses the DAO is allowed to send money to
     address[] public allowedRecipients;
 
-    // only used for splits, give DAOs without a balance the privilege to access their share of the rewards
-    // conceptually, rewardTokens represents a share of right to receive rewards that arise from the already spent fund.
+    // Tracks the addresses that own Reward Tokens. Those addresses can only be
+    // DAOs that have split from the original DAO. Conceptually, Reward Tokens
+    // represent the proportion of the rewards that the DAO has the right to
+    // receive. These Reward Tokens are generated when the DAO spends ether.
     mapping (address => uint) public rewardToken;
-    // sum of all rewardToken
+    // Total supply of rewardToken
     uint public totalRewardToken;
 
-    // account used to manage the rewards which are to be distributed to the
-    // DAO Token Holders (and reward token holders) seperately, so they don't appear in `this.balance`
+    // The account used to manage the rewards which are to be distributed to the
+    // DAO Token Holders of any DAO that holds Reward Tokens
     ManagedAccount public rewardAccount;
-    // amount of wei already payed out to a certain member address
-    mapping (address => uint) public payedOut;
+    // Amount of rewards (in wei) already paid out to a certain address
+    mapping (address => uint) public paidOut;
+    // Map of addresses blocked during a vote (not allowed to transfer DAO
+    // tokens). The address points to the proposal ID.
+    mapping (address => uint) public blocked;
 
-    // deposit in wei to be held for each proposal
+    // The minimum deposit (in wei) required to submit any proposal that is not
+    // requesting a new service provider (no deposit is required for splits)
     uint public proposalDeposit;
 
-    // contract which is able to create a new DAO (with the same code as this one), used for splits
+    // Contract that is able to create a new DAO (with the same code as
+    // this one), used for splits
     DAO_Creator public daoCreator;
 
-    // A proposal with `newServiceProvider == false` represents a transaction issued by this DAO.
-    // A proposal with `newServiceProvider == true` represents a DAO split proposal.
+    // A proposal with `newServiceProvider == false` represents a transaction
+    // to be issued by this DAO
+    // A proposal with `newServiceProvider == true` represents a DAO split
     struct Proposal {
         // The address where the `amount` will go to if the proposal is accepted
-        // (if `newServiceProvider` is true, the proposed service provider of the new DAO).
+        // or if `newServiceProvider` is true, the proposed service provider of
+        //the new DAO).
         address recipient;
         // The amount to transfer to `recipient` if the proposal is accepted.
         uint amount;
         // A plain text description of the proposal
         string description;
-        // A Unix timestamp, denoting the end of the voting period
+        // A unix timestamp, denoting the end of the voting period
         uint votingDeadline;
-        // True if the proposal is open for voting, false if the votes have already been counted
-        bool openToVote;
-        // True if the sufficient votes have been counted with the majority saying yes.
+        // True if the proposal's votes have yet to be counted, otherwise False
+        bool open;
+        // True if quorum has been reached, the votes have been counted, and
+        // the majority said yes
         bool proposalPassed;
-        // A hash to check validity of a proposal. Equal to sha3(_recipient, _amount, _transactionBytecode)
+        // A hash to check validity of a proposal
         bytes32 proposalHash;
-        // The deposit in wei the creator puts in the proposal. Is taken from the msg.value of a newProposal call.
+        // Deposit in wei the creator added when submitting their proposal. It
+        // is taken from the msg.value of a newProposal call.
         uint proposalDeposit;
         // True if this proposal is to assign a new service provider
         bool newServiceProvider;
         // Data needed for splitting the DAO
         SplitData[] splitData;
-        // Array holding all votes that have taken place on the proposal
-        Vote[] votes;
-        // Simple mapping to check if a shareholder has already cast a vote
-        mapping (address => bool) voted;
+        // Number of tokens in favour of the proposal
+        uint yea;
+        // Number of tokens opposed to the proposal
+        uint nay;
+        // Simple mapping to check if a shareholder has voted for it
+        mapping (address => bool) votedYes;
+        // Simple mapping to check if a shareholder has voted against it
+        mapping (address => bool) votedNo;
         // Address of the shareholder who created the proposal
         address creator;
     }
 
     // Used only in the case of a newServiceProvider porposal.
     struct SplitData {
-        // Is the balance of the current DAO minus the deposit at the time of split.
+        // The balance of the current DAO minus the deposit at the time of split
         uint splitBalance;
-        // Represents the total amount of Tokens in existence at the time of split.
+        // The total amount of DAO Tokens in existence at the time of split.
         uint totalSupply;
-        // Amount of rewardToken owned by the DAO at the time of split.
+        // Amount of Reward Tokens owned by the DAO at the time of split.
         uint rewardToken;
-        // the new DAO contract created at the time of split.
+        // The new DAO contract created at the time of split.
         DAO newDAO;
     }
+    // Used to restrict acces to certain functions to only DAO Token Holders
+    modifier onlyTokenholders {}
 
-    struct Vote {
-        // True for 'yay', false for 'nay'
-        bool inSupport;
-        // The address of the voter
-        address voter;
-    }
-
-    modifier onlyShareholders {}
-
-    /// @dev Constructor setting the default service provider and the address for the contract able
-    ///      to create another DAO as well as the parameters for the DAO Token Sale
+    /// @dev Constructor setting the default service provider and the address
+    /// for the contract able to create another DAO as well as the parameters
+    /// for the DAO Token Sale
     /// @param _defaultServiceProvider The default service provider
     /// @param _daoCreator The contract able to (re)create this DAO
     /// @param _minValue Minimal value for a successful DAO Token Sale
     /// @param _closingTime Date (in unix time) of the end of the DAO Token Sale
-    //  function DAO(address _defaultServiceProvider, DAO_Creator _daoCreator, uint _minValue, uint _closingTime)
+    /// @param _privateSale If zero the DAO Token Sale is open to public, a
+    /// non-zero address means that the DAO Token Sale is only for the address
+    // This is the constructor: it can not be overloaded so it is commented out
+    //  function DAO(
+        //  address _defaultServiceProvider,
+        //  DAO_Creator _daoCreator,
+        //  uint _minValue,
+        //  uint _closingTime,
+        //  address _privateSale
+    //  )
 
-    /// @notice Buy Token with `msg.sender` as the beneficiary as long as the DAO Token Sale is not closed, otherwise call receiveDAOReward().
+    /// @notice Buy Token with `msg.sender` as the beneficiary
     function () returns (bool success);
 
-    /// @dev function used to receive rewards as the DAO
+    /// @dev Function used by the products of the DAO (e.g. Slocks) to send
+    /// rewards to the DAO
     /// @return Whether the call to this function was successful or not
-    function receiveDAOReward() returns(bool);
+    function payDAO() returns(bool);
 
-    /// @notice `msg.sender` creates a proposal to send `_amount` Wei to `_recipient` with the transaction data `_transactionBytecode`.
-    ///         (If `_newServiceProvider` is true, then this is a proposal that splits the DAO and sets `_recipient` as the new DAO's new service provider)
-    /// @param _recipient The address of the recipient of the proposed transaction
-    /// @param _amount The amount of wei to be sent with the proposed transaction
-    /// @param _description A string describing the proposal
-    /// @param _transactionBytecode The data of the proposed transaction
-    /// @param _debatingPeriod The time used for debating the proposal, at least 2 weeks.
-    /// @param _newServiceProvider A bool defining whether this proposal is about a new service provider or not
+    /// @dev This function is used by the service provider to send money back
+    /// to the DAO, it can also be used to receive payments that should not be
+    /// counted as rewards (donations, grants, etc.)
+    /// @return Whether the DAO received the ether successfully
+    function receiveEther() returns(bool);
+
+    /// @notice `msg.sender` creates a proposal to send `_amount` Wei to
+    ///  `_recipient` with the transaction data `_transactionData`. If
+    /// `_newServiceProvider` is true, then this is a proposal that splits the
+    /// DAO and sets `_recipient` as the new DAO's new service provider.
+    /// @param _recipient Address of the recipient of the proposed transaction
+    /// @param _amount Amount of wei to be sent with the proposed transaction
+    /// @param _description String describing the proposal
+    /// @param _transactionData Data of the proposed transaction
+    /// @param _debatingPeriod Time used for debating a proposal, at least 2
+    /// weeks for a regular proposal, 10 days for new service provider proposal
+    /// @param _newServiceProvider Bool defining whether this proposal is about
+    /// a new service provider or not
     /// @return The proposal ID. Needed for voting on the proposal
-    function newProposal(address _recipient, uint _amount, string _description, bytes _transactionBytecode, uint _debatingPeriod, bool _newServiceProvider) onlyShareholders returns (uint _proposalID);
+    function newProposal(
+        address _recipient,
+        uint _amount,
+        string _description,
+        bytes _transactionData,
+        uint _debatingPeriod,
+        bool _newServiceProvider
+    ) onlyTokenholders returns (uint _proposalID);
 
-    /// @notice Check that the proposal with the ID `_proposalID` matches a transaction which sends `_amount` with data `_transactionBytecode` to `_recipient`
+    /// @notice Check that the proposal with the ID `_proposalID` matches the
+    /// transaction which sends `_amount` with data `_transactionData`
+    /// to `_recipient`
     /// @param _proposalID The proposal ID
     /// @param _recipient The recipient of the proposed transaction
-    /// @param _amount The amount of wei to be sent with the proposed transaction
-    /// @param _transactionBytecode The data of the proposed transaction
+    /// @param _amount The amount of wei to be sent in the proposed transaction
+    /// @param _transactionData The data of the proposed transaction
     /// @return Whether the proposal ID matches the transaction data or not
-    function checkProposalCode(uint _proposalID, address _recipient, uint _amount, bytes _transactionBytecode) constant returns (bool _codeChecksOut);
+    function checkProposalCode(
+        uint _proposalID,
+        address _recipient,
+        uint _amount,
+        bytes _transactionData
+    ) constant returns (bool _codeChecksOut);
 
     /// @notice Vote on proposal `_proposalID` with `_supportsProposal`
     /// @param _proposalID The proposal ID
     /// @param _supportsProposal Yes/No - support of the proposal
     /// @return The vote ID.
-    function vote(uint _proposalID, bool _supportsProposal) onlyShareholders returns (uint _voteID);
+    function vote(
+        uint _proposalID,
+        bool _supportsProposal
+    ) onlyTokenholders returns (uint _voteID);
 
-    /// @notice Checks whether proposal `_proposalID` with transaction data `_transactionBytecode` has been voted for or rejected,
-    ///         and executes the transaction in the case it has been voted for.
+    /// @notice Checks whether proposal `_proposalID` with transaction data
+    /// `_transactionData` has been voted for or rejected, and executes the
+    /// transaction in the case it has been voted for.
     /// @param _proposalID The proposal ID
-    /// @param _transactionBytecode The data of the proposed transaction // TODO is this needed
+    /// @param _transactionData The data of the proposed transaction
     /// @return Whether the proposed transaction has been executed or not
-    function executeProposal(uint _proposalID, bytes _transactionBytecode) returns (bool _success);
+    function executeProposal(
+        uint _proposalID,
+        bytes _transactionData
+    ) returns (bool _success);
 
-    /// @notice ATTENTION! I confirm to move my remaining funds to a new DAO with `_newServiceProvider` as the new service provider,
-    ///         as has been proposed in proposal `_proposalID`. This will burn my tokens. This can not be undone and will split the
-    ///         DAO into two DAO's, with two underlying tokens.
+    /// @notice ATTENTION! I confirm to move my remaining funds to a new DAO
+    /// with `_newServiceProvider` as the new service provider, as has been
+    /// proposed in proposal `_proposalID`. This will burn my tokens. This can
+    /// not be undone and will split the DAO into two DAO's, with two
+    /// different underlying tokens.
     /// @param _proposalID The proposal ID
     /// @param _newServiceProvider The new service provider of the new DAO
-    /// @dev This function, when called for the first time for this proposal, will create a new DAO and send the portion of the remaining
-    ///      funds which can be attributed to the sender to the new DAO. It will also burn the Tokens of the sender. (TODO: document rewardTokens)
-    function confirmNewServiceProvider(uint _proposalID, address _newServiceProvider) returns (bool _success);
+    /// @dev This function, when called for the first time for this proposal,
+    /// will create a new DAO and send the sender's portion of the remaining
+    /// ether and Reward Tokens to the new DAO. It will also burn the DAO Tokens
+    /// of the sender. (TODO: document rewardTokens - done??)
+    function splitDAO(
+        uint _proposalID,
+        address _newServiceProvider
+    ) returns (bool _success);
 
-    /// @notice add new possible recipient `_recipient` for transactions from the DAO (through proposals)
+    /// @notice Add a new possible recipient `_recipient` to the whitelist so
+    /// that the DAO can send transactions to them (using proposals)
     /// @param _recipient New recipient address
     /// @dev Can only be called by the current service provider
     function addAllowedAddress(address _recipient) external returns (bool _success);
 
-    /// @notice change the deposit needed to make a proposal to `_proposalDeposit`
-    /// @param _proposalDeposit New proposal deposit
-    /// @dev Can only be called by this DAO (through proposals with its recipient being this DAO itself)
+    /// @notice Change the minimum deposit required to submit a proposal
+    /// @param _proposalDeposit The new proposal deposit
+    /// @dev Can only be called by this DAO (through proposals with the
+    /// recipient being this DAO itself)
     function changeProposalDeposit(uint _proposalDeposit) external;
 
-    /// @notice get my portion of the reward which has been sent to `rewardAccount`
-    function getMyReward() external;
+    /// @notice Get my portion of the reward that was sent to `rewardAccount`
+    /// @return Whether the call was successful
+    function getMyReward() returns(bool _success);
+
+    /// @notice Withdraw `account`'s portion of the reward from `rewardAccount`,
+    /// to `account`'s balance
+    /// @return Whether the call was successful
+    function withdrawRewardFor(address _account) returns(bool _success);
+
+    /// @notice Send `_amount` tokens to `_to` from `msg.sender`. Prior to this
+    /// getMyReward() is called.
+    /// @param _to The address of the recipient
+    /// @param _amount The amount of tokens to be transfered
+    /// @return Whether the transfer was successful or not
+    function transferWithoutReward(address _to, uint256 _amount) returns (bool success);
+
+    /// @notice Send `_amount` tokens to `_to` from `_from` on the condition it
+    /// is approved by `_from`. Prior to this getMyReward() is called.
+    /// @param _from The address of the sender
+    /// @param _to The address of the recipient
+    /// @param _amount The amount of tokens to be transfered
+    /// @return Whether the transfer was successful or not
+    function transferFromWithoutReward(
+        address _from,
+        address _to,
+        uint256 _amount
+    ) returns (bool success);
+
+    /// @notice Doubles the 'minQuorumDivisor' in the case quorum has not been
+    /// achieved in 52 weeks
+    /// @return Whether the change was successful or not
+    function halveMinQuorum() returns (bool _success);
+
+    /// @return total number of proposals ever created
+    function numberOfProposals() constant returns (uint _numberOfProposals);
+
+    /// @param _account The address of the account which is checked.
+    /// @return Whether the account is blocked (not allowed to transfer tokens) or not.
+    function isBlocked(address _account) returns (bool);
 
 
-    event ProposalAdded(uint proposalID, address recipient, uint amount, string description);
-    event Voted(uint proposalID, bool position, address indexed voter);
+    event ProposalAdded(
+        uint indexed proposalID,
+        address recipient,
+        uint amount,
+        bool newServiceProvider,
+        string description
+    );
+    event Voted(uint indexed proposalID, bool position, address indexed voter);
     event ProposalTallied(uint indexed proposalID, bool result, uint quorum);
     event NewServiceProvider(address indexed _newServiceProvider);
     event AllowedRecipientAdded(address indexed _recipient);
@@ -191,230 +294,387 @@ contract DAOInterface {
 // The DAO contract itself
 contract DAO is DAOInterface, Token, TokenSale {
 
-    // modifier that allows only shareholders to vote and create new proposals
-    modifier onlyShareholders {
+    // Modifier that allows only shareholders to vote and create new proposals
+    modifier onlyTokenholders {
         if (balanceOf(msg.sender) == 0) throw;
             _
     }
 
+    function DAO(
+        address _defaultServiceProvider,
+        DAO_Creator _daoCreator,
+        uint _minValue,
+        uint _closingTime,
+        address _privateSale
+    ) TokenSale(_minValue, _closingTime, _privateSale) {
 
-    function DAO(address _defaultServiceProvider, DAO_Creator _daoCreator, uint _minValue, uint _closingTime, address _privateSale) TokenSale(_minValue, _closingTime, _privateSale) {
         serviceProvider = _defaultServiceProvider;
         daoCreator = _daoCreator;
         proposalDeposit = 20 ether;
         rewardAccount = new ManagedAccount(address(this));
         lastTimeMinQuorumMet = now;
         minQuorumDivisor = 5; // sets the minimal quorum to 20%
-        if (address(rewardAccount) == 0) throw;
+        proposals.length++; // avoids a proposal with ID 0 because it is used
+        if (address(rewardAccount) == 0)
+            throw;
     }
-
 
     function () returns (bool success) {
-        // The first clause is needed for a split DAO to receive its rewards of the parent DAO. The 40 days are a safety measure.
-        // No new DAO can be created within this time, and in the case people accidentally send ether to the DAO Token Sale, it will bounce back in the buyTokenProxy function
-        if (now > closingTime + 40 days)
-            return receiveDAOReward();
-        else
+        if (now < closingTime + 40 days)
             return buyTokenProxy(msg.sender);
+        else
+            return receiveEther();
     }
 
 
-    function receiveDAOReward() returns(bool) {
+    function payDAO() returns (bool) {
         rewards += msg.value;
         return true;
     }
 
+    function receiveEther() returns (bool) {
+        return true;
+    }
 
-    function newProposal(address _recipient, uint _amount, string _description, bytes _transactionBytecode, uint _debatingPeriod, bool _newServiceProvider) onlyShareholders returns (uint _proposalID){
-        // check sanity
-        if (_newServiceProvider && (_amount != 0 || _transactionBytecode.length != 0 || _recipient == serviceProvider || msg.value > 0 || _debatingPeriod < 1 weeks)) {
+
+    function newProposal(
+        address _recipient,
+        uint _amount,
+        string _description,
+        bytes _transactionData,
+        uint _debatingPeriod,
+        bool _newServiceProvider
+    ) onlyTokenholders returns (uint _proposalID) {
+
+        // Sanity check
+        if (_newServiceProvider && (
+            _amount != 0
+            || _transactionData.length != 0
+            || _recipient == serviceProvider
+            || msg.value > 0
+            || _debatingPeriod < 1 weeks)) {
+            throw;
+        } else if(
+            !_newServiceProvider
+            && (!isRecipientAllowed(_recipient) || (_debatingPeriod < 2 weeks))
+        ) {
             throw;
         }
-        else if (!_newServiceProvider && (!isRecipientAllowed(_recipient) || (_debatingPeriod < 2 weeks))) throw;
 
-        if (!funded || now < closingTime || (msg.value < proposalDeposit && !_newServiceProvider)) throw;
+        if (!isFunded
+            || now < closingTime
+            || (msg.value < proposalDeposit && !_newServiceProvider)) {
 
-        if (_recipient == address(rewardAccount) && _amount > rewards) throw;
+            throw;
+        }
+
+        if (_recipient == address(rewardAccount) && _amount > rewards)
+            throw;
+
+        if (now + _debatingPeriod < now) // prevents overflow
+            throw;
 
         _proposalID = proposals.length++;
         Proposal p = proposals[_proposalID];
         p.recipient = _recipient;
         p.amount = _amount;
         p.description = _description;
-        p.proposalHash = sha3(_recipient, _amount, _transactionBytecode);
+        p.proposalHash = sha3(_recipient, _amount, _transactionData);
         p.votingDeadline = now + _debatingPeriod;
-        p.openToVote = true;
-        //p.proposalPassed = false; // that's default
+        p.open = true;
+        //p.proposalPassed = False; // that's default
         p.newServiceProvider = _newServiceProvider;
         if (_newServiceProvider)
             p.splitData.length++;
         p.creator = msg.sender;
         p.proposalDeposit = msg.value;
-        ProposalAdded(_proposalID, _recipient, _amount, _description);
+        ProposalAdded(
+            _proposalID,
+            _recipient,
+            _amount,
+            _newServiceProvider,
+            _description
+        );
     }
 
 
-    function checkProposalCode(uint _proposalID, address _recipient, uint _amount, bytes _transactionBytecode) noEther constant returns (bool _codeChecksOut) {
+    function checkProposalCode(
+        uint _proposalID,
+        address _recipient,
+        uint _amount,
+        bytes _transactionData
+    ) noEther constant returns (bool _codeChecksOut) {
         Proposal p = proposals[_proposalID];
-        return p.proposalHash == sha3(_recipient, _amount, _transactionBytecode);
+        return p.proposalHash == sha3(_recipient, _amount, _transactionData);
     }
 
 
-    function vote(uint _proposalID, bool _supportsProposal) onlyShareholders noEther returns (uint _voteID) {
-        Proposal p = proposals[_proposalID];
-        if (p.voted[msg.sender] || now >= p.votingDeadline) throw;
+    function vote(
+        uint _proposalID,
+        bool _supportsProposal
+    ) onlyTokenholders noEther returns (uint _voteID) {
 
-        _voteID = p.votes.length++;
-        p.votes[_voteID] = Vote({inSupport: _supportsProposal, voter: msg.sender});
-        p.voted[msg.sender] = true;
+        Proposal p = proposals[_proposalID];
+        if (p.votedYes[msg.sender]
+            || p.votedNo[msg.sender]
+            || now >= p.votingDeadline) {
+
+            throw;
+        }
+
+        if (_supportsProposal) {
+            p.yea += balances[msg.sender];
+            p.votedYes[msg.sender] = true;
+        } else {
+            p.nay += balances[msg.sender];
+            p.votedNo[msg.sender] = true;
+        }
+
+        if (blocked[msg.sender] == 0) {
+            blocked[msg.sender] = _proposalID;
+        } else if (p.votingDeadline > proposals[blocked[msg.sender]].votingDeadline) {
+            // this proposal's voting deadline is further into the future than
+            // the proposal that blocks the sender so make it the blocker
+            blocked[msg.sender] = _proposalID;
+        }
+
         Voted(_proposalID, _supportsProposal, msg.sender);
     }
 
 
-    function executeProposal(uint _proposalID, bytes _transactionBytecode) noEther returns (bool _success) {
+    function executeProposal(
+        uint _proposalID,
+        bytes _transactionData
+    ) noEther returns (bool _success) {
+
         Proposal p = proposals[_proposalID];
         // Check if the proposal can be executed
         if (now < p.votingDeadline  // has the voting deadline arrived?
-            || !p.openToVote        // have the votes been counted?
-            || p.newServiceProvider // new service provider proposal get confirmed not executed
-            || p.proposalHash != sha3(p.recipient, p.amount, _transactionBytecode)) // Does the transaction code match the proposal?
+            // Have the votes been counted?
+            || !p.open
+            // Does the transaction code match the proposal?
+            || p.proposalHash != sha3(p.recipient, p.amount, _transactionData)) {
+
             throw;
-
-        // tally the votes
-        uint yea = 0;
-        uint nay = 0;
-
-        for (uint i = 0; i < p.votes.length; ++i) { //DANGER - unbound loop
-            Vote v = p.votes[i];
-            uint voteWeight = balanceOf(v.voter);
-            if (v.inSupport)
-                yea += voteWeight;
-            else
-                nay += voteWeight;
         }
-        uint quorum = yea + nay;
 
-        // execute result
-        if (quorum >= minQuorum(p.amount) && yea > nay) {
-            if (!p.creator.send(p.proposalDeposit)) throw;
-            // Without this throw, the creator of the proposal can repeat this, and get so much fund.
-            if (!p.recipient.call.value(p.amount)(_transactionBytecode)) throw;
+        if (p.newServiceProvider) {
+            p.open = false;
+            return;
+        }
+
+        uint quorum = p.yea + p.nay;
+
+        // Execute result
+        if (quorum >= minQuorum(p.amount) && p.yea > p.nay) {
+            if (!p.creator.send(p.proposalDeposit))
+                throw;
+            // Without this throw, the creator of the proposal can repeat this,
+            // and get so much ether
+            if (!p.recipient.call.value(p.amount)(_transactionData))
+                throw;
             p.proposalPassed = true;
             _success = true;
             lastTimeMinQuorumMet = now;
             if (p.recipient == address(rewardAccount)) {
-                // This happens when multiple similar proposals are created and both are passed at the same time.
-                if (rewards < p.amount) throw;
+                // This happens when multiple similar proposals are created and
+                // both are passed at the same time.
+                if (rewards < p.amount)
+                    throw;
                 rewards -= p.amount;
-            }
-            else {
+            } else {
                 rewardToken[address(this)] += p.amount;
                 totalRewardToken += p.amount;
             }
-        }
-        else if (quorum >= minQuorum(p.amount) && nay >= yea) {
-            if (!p.creator.send(p.proposalDeposit)) throw;
+        } else if (quorum >= minQuorum(p.amount) && p.nay >= p.yea) {
+            if (!p.creator.send(p.proposalDeposit))
+                throw;
             lastTimeMinQuorumMet = now;
         }
 
-        // Since the voting deadline is over, there is no point in counting again.
-        p.openToVote = false;
+        // Since the voting deadline is over, close the proposal
+        p.open = false;
 
-        // Fire event.
+        // Initiate event
         ProposalTallied(_proposalID, _success, quorum);
     }
 
 
-    function confirmNewServiceProvider(uint _proposalID, address _newServiceProvider) noEther onlyShareholders returns (bool _success) {
+    function splitDAO(
+        uint _proposalID,
+        address _newServiceProvider
+    ) noEther onlyTokenholders returns (bool _success) {
+
         Proposal p = proposals[_proposalID];
 
-        // sanity check
-        if (now < p.votingDeadline  // has the voting deadline arrived?
-            || now > p.votingDeadline + 41 days
-            || p.recipient != _newServiceProvider // Does the new service provider address match?
-            || !p.newServiceProvider) // is it a new service provider proposal?
-            throw;
+        // Sanity check
 
-        // if not already happened, create a new DAO and store the current split data
+        if (now < p.votingDeadline  // has the voting deadline arrived?
+            //The request for a split expires 41 days after the voting deadline
+            || now > p.votingDeadline + 41 days
+            // Does the new service provider address match?
+            || p.recipient != _newServiceProvider
+            // Is it a new service provider proposal?
+            || !p.newServiceProvider
+            // Have you voted for this split?
+            || !p.votedYes[msg.sender]
+            // Did you already vote on another proposal?
+            || blocked[msg.sender] != _proposalID) {
+
+            throw;
+        }
+
+        // If the new DAO doesn't exist yet, create the new DAO and store the
+        // current split data
         if (address(p.splitData[0].newDAO) == 0) {
             p.splitData[0].newDAO = createNewDAO(_newServiceProvider);
-            if (address(p.splitData[0].newDAO) == 0) throw; // Call depth limit reached, etc.
-            if (this.balance < p.proposalDeposit) throw; // p.proposalDeposit should be zero here.
+            // Call depth limit reached, etc.
+            if (address(p.splitData[0].newDAO) == 0)
+                throw;
+            // p.proposalDeposit should be zero here
+            if (this.balance < p.proposalDeposit)
+                throw;
             p.splitData[0].splitBalance = this.balance - p.proposalDeposit;
             p.splitData[0].rewardToken = rewardToken[address(this)];
             p.splitData[0].totalSupply = totalSupply;
+            p.proposalPassed = true;
         }
 
-        // move funds and assign new Tokens
-        uint fundsToBeMoved = (balances[msg.sender] * p.splitData[0].splitBalance) / p.splitData[0].totalSupply;
-        if (p.splitData[0].newDAO.buyTokenProxy.value(fundsToBeMoved)(msg.sender) == false) throw;
+        // Move funds and assign new Tokens
+        uint fundsToBeMoved =
+            (balances[msg.sender] * p.splitData[0].splitBalance) /
+            p.splitData[0].totalSupply;
+        if (p.splitData[0].newDAO.buyTokenProxy.value(fundsToBeMoved)(msg.sender) == false)
+            throw;
 
 
-        // assign reward rights to new DAO
-        uint rewardTokenToBeMoved = (balances[msg.sender] * p.splitData[0].rewardToken) / p.splitData[0].totalSupply;
+        // Assign reward rights to new DAO
+        uint rewardTokenToBeMoved =
+            (balances[msg.sender] * p.splitData[0].rewardToken) /
+            p.splitData[0].totalSupply;
         rewardToken[address(p.splitData[0].newDAO)] += rewardTokenToBeMoved;
-        if (rewardToken[address(this)] < rewardTokenToBeMoved) throw;  // should not happen.
+        if (rewardToken[address(this)] < rewardTokenToBeMoved)
+            throw;
         rewardToken[address(this)] -= rewardTokenToBeMoved;
 
-        // burn tokens
+        // Burn DAO Tokens
         Transfer(msg.sender, 0, balances[msg.sender]);
         totalSupply -= balances[msg.sender];
         balances[msg.sender] = 0;
+        paidOut[address(p.splitData[0].newDAO)] += paidOut[msg.sender];
+        paidOut[msg.sender] = 0;
 
         return true;
     }
 
 
-    function getMyReward() noEther external {
-        // my share of the rewardToken of this DAO, or when called by a split child DAO, their portion of the rewardToken.
-        uint myShareOfTheReward = (balanceOf(msg.sender) * rewardToken[address(this)]) / totalSupply + rewardToken[msg.sender];
-        uint myReward = (myShareOfTheReward * rewardAccount.accumulatedInput()) / totalRewardToken - payedOut[msg.sender];
-        if (!rewardAccount.payOut(msg.sender, myReward)) throw;
-        payedOut[msg.sender] += myReward;
+    function getMyReward() noEther returns (bool _success) {
+        return withdrawRewardFor(msg.sender);
+    }
+
+
+    function withdrawRewardFor(address _account) noEther returns (bool _success) {
+        // The account's portion of Reward Tokens of this DAO
+        uint portionOfTheReward =
+            (balanceOf(_account) * rewardToken[address(this)]) /
+            totalSupply + rewardToken[_account];
+        uint reward =
+            (portionOfTheReward * rewardAccount.accumulatedInput()) /
+            totalRewardToken - paidOut[_account];
+        if (!rewardAccount.payOut(_account, reward))
+            throw;
+        paidOut[_account] += reward;
+        return true;
     }
 
 
     function transfer(address _to, uint256 _value) returns (bool success) {
-        if (funded && now > closingTime && transferPayedOut(msg.sender, _to, _value) && super.transfer(_to, _value)){
+        if (isFunded
+            && now > closingTime
+            && !isBlocked(msg.sender)
+            && transferPaidOut(msg.sender, _to, _value)
+            && super.transfer(_to, _value)) {
+
             return true;
+        } else {
+            throw;
         }
-        else throw;
+    }
+
+
+    function transferWithoutReward(address _to, uint256 _value) returns (bool success) {
+        if (!getMyReward())
+            throw;
+        return transfer(_to, _value);
     }
 
 
     function transferFrom(address _from, address _to, uint256 _value) returns (bool success) {
-        if (funded && now > closingTime && transferPayedOut(_from, _to, _value) && super.transferFrom(_from, _to, _value)){
+        if (isFunded
+            && now > closingTime
+            && !isBlocked(_from)
+            && transferPaidOut(_from, _to, _value)
+            && super.transferFrom(_from, _to, _value)) {
+
             return true;
+        } else {
+            throw;
         }
-        else throw;
     }
 
 
-    function transferPayedOut(address _from, address _to, uint256 _value) internal returns (bool success){
-        uint transferPayedOut = payedOut[_from] * _value / balanceOf(_from);
-        if (transferPayedOut > payedOut[_from]) throw;
-        payedOut[_from] -= transferPayedOut;
-        payedOut[_to] += transferPayedOut;
+    function transferFromWithoutReward(
+        address _from,
+        address _to,
+        uint256 _value
+    ) returns (bool success) {
+
+        if (!withdrawRewardFor(_from))
+            throw;
+        return transferFrom(_from, _to, _value);
+    }
+
+
+    function transferPaidOut(
+        address _from,
+        address _to,
+        uint256 _value
+    ) internal returns (bool success) {
+
+        uint transferPaidOut = paidOut[_from] * _value / balanceOf(_from);
+        if (transferPaidOut > paidOut[_from])
+            throw;
+        paidOut[_from] -= transferPaidOut;
+        paidOut[_to] += transferPaidOut;
         return true;
     }
 
 
     function changeProposalDeposit(uint _proposalDeposit) noEther external {
-        if (msg.sender != address(this) || _proposalDeposit > this.balance / 10) throw;
+        if (msg.sender != address(this) || _proposalDeposit > this.balance / 10)
+            throw;
         proposalDeposit = _proposalDeposit;
     }
 
 
     function addAllowedAddress(address _recipient) noEther external returns (bool _success) {
-        if (msg.sender != serviceProvider) throw;
+        if (msg.sender != serviceProvider)
+            throw;
         allowedRecipients.push(_recipient);
         return true;
     }
 
 
     function isRecipientAllowed(address _recipient) internal returns (bool _isAllowed) {
-        if (_recipient == serviceProvider || _recipient == address(rewardAccount) || _recipient == address(this))
+        if (_recipient == serviceProvider
+            || _recipient == address(rewardAccount)
+            || _recipient == address(this)
+            || (_recipient == address(extraBalance)
+                // only allowed when at least the amount held in the
+                // extraBalance account has been spent from the DAO
+                && totalRewardToken > extraBalance.accumulatedInput()))
             return true;
+
         for (uint i = 0; i < allowedRecipients.length; ++i) {
             if (_recipient == allowedRecipients[i])
                 return true;
@@ -424,18 +684,19 @@ contract DAO is DAOInterface, Token, TokenSale {
 
 
     function minQuorum(uint _value) internal returns (uint _minQuorum) {
-        return totalSupply / minQuorumDivisor + _value / 3;     // minimum of 20% and maximum of 53.33%
+        // minimum of 20% and maximum of 53.33%
+        return totalSupply / minQuorumDivisor + _value / 3;
     }
 
 
-    function halfMinQuorum() returns (bool _success){
+    function halveMinQuorum() returns (bool _success) {
         if (lastTimeMinQuorumMet < (now - 52 weeks)) {
             lastTimeMinQuorumMet = now;
             minQuorumDivisor *= 2;
             return true;
-        }
-        else
+        } else {
             return false;
+        }
     }
 
 
@@ -446,17 +707,37 @@ contract DAO is DAOInterface, Token, TokenSale {
 
 
     function numberOfProposals() constant returns (uint _numberOfProposals) {
-        return proposals.length;
+        // Don't count index 0. It's used by isBlocked() and exists from start
+        return proposals.length - 1;
     }
 
 
-    function numberOfVotes(uint _proposalID) constant returns (uint _numberOfVotes) {
-        return proposals[_proposalID].votes.length;
+    function isBlocked(address _account) returns (bool) {
+        if (blocked[_account] == 0)
+            return false;
+        Proposal p = proposals[blocked[_account]];
+        if (!p.open) {
+            blocked[_account] = 0;
+            return false;
+        } else {
+            return true;
+        }
     }
 }
 
 contract DAO_Creator {
-    function createDAO(address _defaultServiceProvider, uint _minValue, uint _closingTime) returns (DAO _newDAO) {
-        return new DAO(_defaultServiceProvider, DAO_Creator(this), _minValue, _closingTime, msg.sender);
+    function createDAO(
+        address _defaultServiceProvider,
+        uint _minValue,
+        uint _closingTime
+    ) returns (DAO _newDAO) {
+
+        return new DAO(
+            _defaultServiceProvider,
+            DAO_Creator(this),
+            _minValue,
+            _closingTime,
+            msg.sender
+        );
     }
 }

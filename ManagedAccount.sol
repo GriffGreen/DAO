@@ -15,7 +15,6 @@ You should have received a copy of the GNU lesser General Public License
 along with the DAO.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-
 /*
 Basic account, managed by another contract
 */
@@ -26,28 +25,27 @@ contract ManagedAccountInterface {
 
     function payOut(address _recipient, uint _amount) returns (bool);
 
-    event PayOut(address _recipient, uint _amount);
+    event PayOut(address indexed _recipient, uint _amount);
 }
 
-contract ManagedAccount is ManagedAccountInterface{
 
-    function ManagedAccount(address _owner){
+contract ManagedAccount is ManagedAccountInterface{
+    function ManagedAccount(address _owner) {
         owner = _owner;
     }
 
-
-    function(){
+    function() {
         accumulatedInput += msg.value;
     }
 
-
-    function payOut(address _recipient, uint _amount) returns (bool){
-        if (msg.sender != owner || msg.value > 0) throw;
-        if (_recipient.send(_amount)){
+    function payOut(address _recipient, uint _amount) returns (bool) {
+        if (msg.sender != owner || msg.value > 0)
+            throw;
+        if (_recipient.call.value(_amount)()) {
             PayOut(_recipient, _amount);
             return true;
-        }
-        else
+        } else {
             return false;
+        }
     }
 }

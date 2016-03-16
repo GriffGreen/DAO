@@ -1,6 +1,5 @@
 # The DAO
 
-
 ## What is it? 
 A generic DAO (Decentralized Autonomous Organization) written in Solidity to run on the Ethereum block chain. 
 Simple, decentralized and 100% secure.
@@ -39,33 +38,27 @@ A copy of the GNU lesser General Public License is included
 along with the DAO. See LICENSE.
 
 
-### Solidity files
-#### DAO
-##### TokenSale.sol: 
-Basic Token Sale contract for crowd funding. 
+## Solidity files
 
-##### DAO.sol:
-Generic contract for a decentralized autonomous organisation to decide how to use the raised funds. 
+### DAO.sol:
+Generic contract for a Decentralized Autonomous Organisation (DAO) to manage a trust
 
-##### Token.sol: 
-Most, basic default, standardised Token contract
-Original taken from [ConsenSys](https://github.com/ConsenSys/Tokens/blob/master/Token_Contracts/contracts/Standard_Token.sol)
-which is based on [standardised APIs](https://github.com/ethereum/wiki/wiki/Standardized_Contract_APIs)
+### Token.sol: 
+Defines the functions to check token balances, send tokens, send tokens on behalf of a 3rd party and its corresponding approval process.
 
-#### DAO interactions
-The following contracts interact with the DAO
+#### TokenSale.sol: 
+Token Sale contract, used by the DAO to raise its funding goal
 
-#####SampleOffer.sol
+### SampleOffer.sol
+Sample Proposal from a Service Provider to the DAO
 
-#####ManagedAccount.sol
+### ManagedAccount.sol
+Basic account, managed by another contract
 
-#### Boiler Plate
+### DAOTokenSaleProxyTransferer.sol
+This contract is used as a fall back in case an exchange doesn't implement the "add data to a transaction" feature in a timely manner, preventing it from calling buyTokenProxy().
 
-#####DAOTokenSaleProxyTransferer.sol
-
-## Deployments
-TBD
 
 ## Contact
-[slack](https://slockit.slack.com/messages/dao/)
+Please contact us on [slack](https://slockit.slack.com/messages/dao/)
 
