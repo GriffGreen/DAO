@@ -16,13 +16,20 @@ along with the DAO.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 /*
-Basic account, managed by another contract
+Basic account, used by the DAO contract to seperately manage both the rewards 
+and the extraBalance accounts. 
 */
 
 contract ManagedAccountInterface {
+    // The only address with permission to withdraw from this account
     address public owner;
+    // The sum of ether (in wei) which has been sent to this contract
     uint public accumulatedInput;
 
+    /// @notice Sends _amount of wei to _recipient
+    /// @param _amount The amount of wei to send to _recipient
+    /// @param _recipient The address to receive _amount of wei
+    /// @return True if the send completed
     function payOut(address _recipient, uint _amount) returns (bool);
 
     event PayOut(address indexed _recipient, uint _amount);
@@ -30,10 +37,13 @@ contract ManagedAccountInterface {
 
 
 contract ManagedAccount is ManagedAccountInterface{
+
     function ManagedAccount(address _owner) {
         owner = _owner;
     }
-
+    // When the contract receives a transaction without data this is called. 
+    // It counts the amount of ether it receives and stores it in 
+    // accumulatedInput.
     function() {
         accumulatedInput += msg.value;
     }
