@@ -210,7 +210,7 @@ The map \verb|weiGiven| stores the amount of wei given by each contributor durin
 
 The constructor \verb|TokenSale| initiates the token sale with the arguments \verb|minValue|, \verb|closingtime| and \verb|privateSale|, which will be set in the constructor of the DAO contract (\ref{app:DAO}) which is only executed once, when the DAO is deployed. 
 
-The function \verb|buyTokenProxy| creates one unit of the DAO token’s minimum denomination for every wei sent. The price is calculated as $$\Xi_c \cdot 20 / \text{divisor}$$. Here $\Xi_c$ is the amount of wei given in order to purchase tokens, and \verb|divisor| is calculated depending on the time as described in section \ref{TokenPrice}.
+The function \verb|buyTokenProxy| creates one unit of the DAO token’s minimum denomination for every wei sent. The price is calculated as $$\Xi_c \cdot 20 / \text{divisor}$$ Here $\Xi_c$ is the amount of wei given in order to purchase tokens, and \verb|divisor| is calculated depending on the time as described in section \ref{TokenPrice}.
 
 The parameter \verb|tokenHolder| defines the receiver of the newly minted tokens. 
 
@@ -502,9 +502,9 @@ Their portion $S$ is calculated as follows:
 Here $R_{\text{DAO}}$ is the amount of reward tokens owned by the DAO, and $T_{\text{sender}}$ the amount of DAO tokens which are directly owned by the sender. $R_{\text{sender}}$ will always be zero except in the case that the sender is a DAO that has split from the original DAO and owns their own reward tokens from the split.
 The amount of ether $\Xi_{\text{reward}}$ which is then sent to the DAO token holder that calls this function is:
 \begin{equation}
-\Xi_{\text{reward}} = \Xi_{\text{rewardAccount}} \cdot S / R_{\text{total}} - \Xi_{\text{paidOut}}[\text{sender}]
+\Xi_{\text{reward}} = \Xi_{\text{rewardAccount}} \cdot S / R_{\text{total}} - \Xi_{\text{paidOut[sender]}}
 \end{equation}
-Here $\Xi_{\text{rewardAccount}}$ is the total rewards ever received by the \verb|rewardAccount|, $R_{\text{total}}$ is the total amount of reward tokens that have ever been created, regardless of splits (\verb|totalRewardToken|) and $\Xi_{\text{paidOut}}[\text{sender}]$ is the total amount of wei which has already been paid out to the DAO token holder calling the function. The reward tokens are further elaborated in section \ref{split}.
+Here $\Xi_{\text{rewardAccount}}$ is the total rewards ever received by the \verb|rewardAccount|, $R_{\text{total}}$ is the total amount of reward tokens that have ever been created, regardless of splits (\verb|totalRewardToken|) and $\Xi_{\text{paidOut[sender]}}$ is the total amount of wei which has already been paid out to the DAO token holder calling the function. The reward tokens are further elaborated in section \ref{split}.
 \subsubsection*{addAllowedAddress}
 This function adds an address to the whitelist, \verb|allowedRecipients|. It can only be executed by the service provider.
 
@@ -803,7 +803,6 @@ contract TokenSale is TokenSaleInterface, Token {
                 Refund(msg.sender, weiGiven[msg.sender]);
                 totalSupply -= balances[msg.sender];
                 balances[msg.sender] = 0;
-                weiGiven[msg.sender] = 0;
             }
         }
     }
@@ -1018,7 +1017,7 @@ contract DAOInterface {
     /// @dev This function, when called for the first time for this proposal,
     /// will create a new DAO and send the sender's portion of the remaining
     /// ether and Reward Tokens to the new DAO. It will also burn the DAO Tokens
-    /// of the sender. (TODO: document rewardTokens - done??)
+    /// of the sender. 
     function splitDAO(
         uint _proposalID,
         address _newServiceProvider
@@ -1635,7 +1634,7 @@ contract SampleOffer {
 
     function setDeploymentFee(uint _deploymentReward) callingRestriction {
         if (deploymentReward > 10 ether && msg.sender != address(client))
-            throw; // TODO, set a max defined by service provider, or ideally oracle (set in euro)
+            throw; 
         deploymentReward = _deploymentReward;
     }
 
